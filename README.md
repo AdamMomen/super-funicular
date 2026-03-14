@@ -132,6 +132,26 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
+## Web app (Streamlit)
+
+```bash
+pip install -e .
+streamlit run app.py
+```
+
+Open http://localhost:8501. Upload a CSV (and optional config JSON), or use the bundled sample data.
+
+## Deployment (Coolify)
+
+1. **New Application** in Coolify → **Dockerfile** (build from repo)
+2. Set **Base Directory** if the Dockerfile is not in the repo root
+3. In **Network** settings, set **Port** to `8501`
+4. Build and deploy
+
+The app listens on port 8501. Coolify will proxy traffic to it.
+
+Optional: Set up GitHub Actions for CI/CD—build the image, push to GHCR, then trigger Coolify’s deployment webhook.
+
 ## License
 
 MIT
