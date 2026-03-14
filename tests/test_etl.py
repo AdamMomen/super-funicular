@@ -92,7 +92,7 @@ def test_run_etl_integration(tmp_path: Path) -> None:
         "2024-01-16,SKU-001,50,retail\n"
         "2024-01-17,SKU-002,200,wholesale\n"
     )
-    result = run_etl(csv_path, freq="D")
+    result = run_etl(orders_path=csv_path, freq="D")
     assert result.raw_row_count == 3
     assert set(result.skus) == {"SKU-001", "SKU-002"}
     assert len(result.aggregated["SKU-001"]) >= 2
