@@ -250,3 +250,60 @@ def run_agent_turn(
             return response_text, context.last_chart
 
     return "Maximum iterations reached.", context.last_chart
+
+
+def run_agent_turn_stream(
+    user_message: str,
+    context: AgentContext,
+    *,
+    freq: str = "D",
+):
+    """Run agent turn and yield SSE events: tool_start, tool_complete, text, chart, done, error."""
+    if context.messages:
+        messages = context.messages + [{"role": "user", "content": user_message}]
+    else:
+        messages = [
+            {"role": "user", "content": f"{SYSTEM_PROMPT}\n\nUser: {user_message}"},
+        ]
+
+    max_iterations = 10
+    for _ in range(max_iterations):
+        result = chat(messages, TOOLS)
+
+        tool_calls = result.get("tool_calls")
+        if tool_calls:
+            for tc in tool_calls:
+                tool_name = tc.get("name", "")
+                yield ("tool_start", {"tool": tool_name})
+
+                tool_args = tc.get("arguments", {})
+                if isinstance(tool_args, str):
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        tool_args = {}
+                tool_result = _execute_tool(tool_name, tool_args, context, freq)
+
+                yield ("tool_complete", {"tool": tool_name, "summary": tool_result[:200]})
+
+                messages.append(
+                    {"role": "assistant", "content": json.dumps(tc)}
+                )
+                messages.append({"role": "tool", "content": tool_result})
+        else:
+            response_text = result.get("response", "")
+            context.messages = messages + [
+                {"role": "assistant", "content": response_text},
+            ]
+
+            for char in response_text:
+                yield ("text", {"delta": char})
+
+            if context.last_chart is not None:
+                chart_json = json.loads(context.last_chart.to_json())
+                yield ("chart", {"data": chart_json})
+
+            yield ("done", {"response": response_text})
+            return
+
+    yield ("error", {"message": "Maximum iterations reached."})

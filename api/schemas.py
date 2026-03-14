@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -35,3 +36,29 @@ class AgentState(BaseModel):
     alerts: list[str]
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     data_quality: DataQuality | None = None
+
+
+class ChatRequest(BaseModel):
+    """Request body for chat endpoints."""
+
+    message: str
+    session_id: str | None = None
+    orders_base64: str | None = None
+    config_base64: str | None = None
+
+
+class OrderRow(BaseModel):
+    """Single order row for forecast input."""
+
+    order_date: str
+    sku: str
+    quantity: int
+    channel: str | None = None
+
+
+class ForecastJsonRequest(BaseModel):
+    """Request body for JSON forecast endpoint."""
+
+    orders: list[OrderRow]
+    algorithm: Literal["holt_winters", "simple_mean", "naive", "rolling_ma", "exp_smoothing"] = "holt_winters"
+    rolling_window: int | None = 14  # Only used when algorithm == "rolling_ma"

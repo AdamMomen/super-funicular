@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +17,9 @@ def plot_forecast(
     history: pd.Series,
     forecast: ForecastResult,
     sku: str,
+    *,
+    showlegend_history: bool = True,
+    showlegend_forecast: bool = True,
 ) -> go.Figure:
     """Create Plotly figure: history + 90-day forecast.
 
@@ -23,6 +27,8 @@ def plot_forecast(
         history: Historical demand series.
         forecast: Forecast result with forecast series.
         sku: SKU label.
+        showlegend_history: Whether to show historical trace in legend.
+        showlegend_forecast: Whether to show forecast trace in legend.
 
     Returns:
         Plotly Figure.
@@ -36,6 +42,8 @@ def plot_forecast(
             y=history.values,
             mode="lines+markers",
             name="Historical demand",
+            legendgroup="historical",
+            showlegend=showlegend_history,
             line=dict(color="#2563eb", width=2),
             marker=dict(size=4),
         )
@@ -48,6 +56,8 @@ def plot_forecast(
             y=forecast.forecast.values,
             mode="lines",
             name="90-day forecast",
+            legendgroup="forecast",
+            showlegend=showlegend_forecast,
             line=dict(color="#dc2626", width=2, dash="dash"),
         )
     )
@@ -64,6 +74,20 @@ def plot_forecast(
     )
 
     return fig
+
+
+def plot_charts_by_sku(
+    forecasts: dict[str, ForecastResult],
+    aggregated: dict[str, pd.Series],
+) -> dict[str, dict]:
+    """Create one chart per SKU. Returns dict of SKU -> Plotly figure as JSON-serializable dict."""
+    result: dict[str, dict] = {}
+    for sku in forecasts:
+        forecast = forecasts[sku]
+        history = aggregated.get(sku, forecast.history)
+        fig = plot_forecast(history, forecast, sku)
+        result[sku] = json.loads(fig.to_json())
+    return result
 
 
 def plot_all_skus(
@@ -95,7 +119,14 @@ def plot_all_skus(
     for i, sku in enumerate(skus):
         forecast = forecasts[sku]
         history = aggregated.get(sku, forecast.history)
-        subfig = plot_forecast(history, forecast, sku)
+        # Only show legend for first SKU; legendgroup groups traces so one entry per type
+        subfig = plot_forecast(
+            history,
+            forecast,
+            sku,
+            showlegend_history=(i == 0),
+            showlegend_forecast=(i == 0),
+        )
         for trace in subfig.data:
             fig.add_trace(trace, row=i + 1, col=1)
 

@@ -7,6 +7,9 @@ from typing import Any
 
 import httpx
 
+# Set to True to disable reading Cloudflare env vars (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)
+CLOUDFLARE_DISABLED = True
+
 DEFAULT_MODEL = "@hf/nousresearch/hermes-2-pro-mistral-7b"
 BASE_URL = "https://api.cloudflare.com/client/v4/accounts"
 
@@ -35,6 +38,9 @@ def chat(
         ValueError: If credentials are missing.
         httpx.HTTPStatusError: On API errors.
     """
+    if CLOUDFLARE_DISABLED:
+        raise ValueError("Cloudflare disabled. Set CLOUDFLARE_DISABLED = False in llm.py to enable.")
+
     account_id = account_id or os.environ.get("CLOUDFLARE_ACCOUNT_ID")
     api_token = api_token or os.environ.get("CLOUDFLARE_API_TOKEN")
     if not account_id or not api_token:
@@ -68,6 +74,8 @@ def chat(
 
 def is_configured() -> bool:
     """Check if Cloudflare credentials are configured."""
+    if CLOUDFLARE_DISABLED:
+        return False
     return bool(
         os.environ.get("CLOUDFLARE_ACCOUNT_ID")
         and os.environ.get("CLOUDFLARE_API_TOKEN")

@@ -132,14 +132,18 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-## Web app (Streamlit)
+## Web app (React + Tailwind)
 
 ```bash
+# Backend
 pip install -e .
-streamlit run app.py
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Frontend (separate terminal)
+cd frontend && npm install && npm run dev
 ```
 
-Open http://localhost:8501. Upload a CSV (and optional config JSON), or use the bundled sample data.
+Open http://localhost:5173. The frontend proxies `/api` to the backend. Upload a CSV (and optional config JSON), or use the bundled sample data.
 
 ### Chat tab (agent)
 
@@ -158,10 +162,10 @@ Structured JSON endpoint for agent consumption:
 
 ```bash
 # GET with sample data
-curl "http://localhost:8000/forecast?sample=true&horizon=90"
+curl "http://localhost:8000/api/forecast?sample=true&horizon=90"
 
 # POST with CSV upload
-curl -X POST -F "orders=@data/sample_orders.csv" -F "config=@data/sample_config.json" http://localhost:8000/forecast
+curl -X POST -F "orders=@data/sample_orders.csv" -F "config=@data/sample_config.json" http://localhost:8000/api/forecast
 ```
 
 Response shape: `skus`, `alerts`, `last_updated`, `data_quality`.
@@ -179,16 +183,27 @@ The ETL supports pluggable sources via `SourceAdapter`:
 
 See `src/cpg_forecast/sources/`.
 
+## Development (Docker with hot reload)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+- **Frontend**: http://localhost:5173 (Vite dev server with HMR)
+- **API**: http://localhost:8000 (uvicorn with `--reload`)
+
+Source code is mounted as volumes; edits to `frontend/`, `api/`, or `src/` trigger hot reload.
+
 ## Deployment (Docker Compose + Coolify)
 
 ```bash
 docker compose up --build
 ```
 
-- **Streamlit**: http://localhost:8501
-- **API**: http://localhost:8000 (health: `/health`)
+- **App (React + API)**: http://localhost:8000 — serves frontend and API at `/api/*`
+- Health: `GET /api/health`
 
-**Coolify:** New Application → Docker Compose → point to repo. Assign domains or ports: Streamlit (8501), API (8000).
+**Coolify:** New Application → Docker Compose → point to repo. Assign domain or port 8000.
 
 
 ## License

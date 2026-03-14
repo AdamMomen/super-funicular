@@ -121,6 +121,7 @@ def aggregate_demand(
 
 def run_etl(
     orders_path: Path | None = None,
+    orders_df: pd.DataFrame | None = None,
     source: "SourceAdapter | None" = None,
     config_path: Path | None = None,
     freq: Literal["D", "W"] = "D",
@@ -128,8 +129,9 @@ def run_etl(
     """Run full ETL pipeline: load, clean, aggregate.
 
     Args:
-        orders_path: Path to orders CSV (use when source is None).
-        source: Source adapter for orders (use when orders_path is None).
+        orders_path: Path to orders CSV (use when source and orders_df are None).
+        orders_df: DataFrame with order_date, sku, quantity (optional channel).
+        source: Source adapter for orders (use when orders_path and orders_df are None).
         config_path: Optional path to config JSON (for future use).
         freq: Aggregation frequency.
 
@@ -143,6 +145,22 @@ def run_etl(
     if source is not None:
         df = source.load_orders()
         rows_loaded = len(df)
+    elif orders_df is not None:
+        df_raw = orders_df.copy()
+        df_raw.columns = df_raw.columns.str.strip().str.lower()
+        if "channel" not in df_raw.columns:
+            df_raw["channel"] = ""
+        df_raw["order_date"] = pd.to_datetime(df_raw["order_date"], errors="coerce")
+        df_raw = df_raw.dropna(subset=["order_date"])
+        df_raw["quantity"] = pd.to_numeric(df_raw["quantity"], errors="coerce")
+        df_raw = df_raw.dropna(subset=["quantity"])
+        df_raw["quantity"] = df_raw["quantity"].astype(int)
+        rows_loaded = len(df_raw)
+        df = clean_orders(df_raw)
+        rows_after = len(df)
+        dup_count = df_raw.duplicated(subset=["order_date", "sku", "quantity"]).sum()
+        rows_dropped_duplicates = int(dup_count)
+        rows_dropped_invalid = max(0, rows_loaded - rows_after - rows_dropped_duplicates)
     elif orders_path is not None:
         df_raw = load_orders(orders_path)
         rows_loaded = len(df_raw)
@@ -152,7 +170,7 @@ def run_etl(
         rows_dropped_duplicates = int(dup_count)
         rows_dropped_invalid = max(0, rows_loaded - rows_after - rows_dropped_duplicates)
     else:
-        raise ValueError("Provide either orders_path or source")
+        raise ValueError("Provide orders_path, orders_df, or source")
 
     aggregated = aggregate_demand(df, freq=freq)
 
