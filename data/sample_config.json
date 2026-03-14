@@ -1,0 +1,25 @@
+{
+  "default_lead_time_days": 14,
+  "default_safety_stock_days": 7,
+  "default_moq": 1,
+  "skus": {
+    "SKU-001": {
+      "lead_time_days": 14,
+      "safety_stock_days": 7,
+      "current_inventory": 50,
+      "moq": 100
+    },
+    "SKU-002": {
+      "lead_time_days": 21,
+      "safety_stock_days": 10,
+      "current_inventory": 200,
+      "moq": 200
+    },
+    "SKU-003": {
+      "lead_time_days": 14,
+      "safety_stock_days": 7,
+      "current_inventory": 0,
+      "moq": 50
+    }
+  }
+}
