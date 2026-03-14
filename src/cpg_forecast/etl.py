@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from cpg_forecast.sources.base import SourceAdapter
 
 REQUIRED_COLUMNS = {"order_date", "sku", "quantity"}
 OPTIONAL_COLUMNS = {"channel", "customer_id"}
@@ -117,28 +120,49 @@ def aggregate_demand(
 
 
 def run_etl(
-    orders_path: Path,
+    orders_path: Path | None = None,
+    source: "SourceAdapter | None" = None,
     config_path: Path | None = None,
     freq: Literal["D", "W"] = "D",
 ) -> "ETLResult":
     """Run full ETL pipeline: load, clean, aggregate.
 
     Args:
-        orders_path: Path to orders CSV.
+        orders_path: Path to orders CSV (use when source is None).
+        source: Source adapter for orders (use when orders_path is None).
         config_path: Optional path to config JSON (for future use).
         freq: Aggregation frequency.
 
     Returns:
         ETLResult with aggregated time series per SKU.
     """
-    df = load_orders(orders_path)
-    df = clean_orders(df)
+    rows_loaded = 0
+    rows_dropped_invalid = 0
+    rows_dropped_duplicates = 0
+
+    if source is not None:
+        df = source.load_orders()
+        rows_loaded = len(df)
+    elif orders_path is not None:
+        df_raw = load_orders(orders_path)
+        rows_loaded = len(df_raw)
+        df = clean_orders(df_raw)
+        rows_after = len(df)
+        dup_count = df_raw.duplicated(subset=["order_date", "sku", "quantity"]).sum()
+        rows_dropped_duplicates = int(dup_count)
+        rows_dropped_invalid = max(0, rows_loaded - rows_after - rows_dropped_duplicates)
+    else:
+        raise ValueError("Provide either orders_path or source")
+
     aggregated = aggregate_demand(df, freq=freq)
 
     return ETLResult(
         raw_row_count=len(df),
         skus=list(aggregated.keys()),
         aggregated=aggregated,
+        rows_loaded=rows_loaded,
+        rows_dropped_invalid=rows_dropped_invalid,
+        rows_dropped_duplicates=rows_dropped_duplicates,
     )
 
 
@@ -150,7 +174,13 @@ class ETLResult:
         raw_row_count: int,
         skus: list[str],
         aggregated: dict[str, pd.Series],
+        rows_loaded: int = 0,
+        rows_dropped_invalid: int = 0,
+        rows_dropped_duplicates: int = 0,
     ) -> None:
         self.raw_row_count = raw_row_count
         self.skus = skus
         self.aggregated = aggregated
+        self.rows_loaded = rows_loaded or raw_row_count
+        self.rows_dropped_invalid = rows_dropped_invalid
+        self.rows_dropped_duplicates = rows_dropped_duplicates

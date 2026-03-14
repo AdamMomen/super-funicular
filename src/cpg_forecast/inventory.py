@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cpg_forecast.config import load_config
 from cpg_forecast.forecast import ForecastResult
 
 logger = logging.getLogger(__name__)
@@ -29,22 +29,7 @@ class InventoryRecommendation:
     current_inventory: float
     recommendation: str  # "ORDER_NOW" | "OK" | "LOW_STOCK"
     days_until_stockout: float | None
-
-
-def _load_config(config_path: Path | None) -> dict[str, Any]:
-    """Load config JSON with defaults."""
-    defaults = {
-        "default_lead_time_days": 14,
-        "default_safety_stock_days": 7,
-        "default_moq": 1,
-        "skus": {},
-    }
-    if config_path is None or not config_path.exists():
-        return defaults
-
-    with open(config_path) as f:
-        data = json.load(f)
-    return {**defaults, **data}
+    lead_time_days: int = 14
 
 
 def _get_sku_config(config: dict[str, Any], sku: str) -> dict[str, Any]:
@@ -100,7 +85,7 @@ def compute_recommendations(
     Returns:
         List of InventoryRecommendation, one per SKU.
     """
-    config = _load_config(config_path)
+    config = load_config(config_path)
     recommendations: list[InventoryRecommendation] = []
 
     for sku, forecast in forecasts.items():
@@ -144,6 +129,7 @@ def compute_recommendations(
                 current_inventory=current_inv,
                 recommendation=rec,
                 days_until_stockout=days_until_stockout,
+                lead_time_days=lead_time_days,
             )
         )
 

@@ -141,16 +141,44 @@ streamlit run app.py
 
 Open http://localhost:8501. Upload a CSV (and optional config JSON), or use the bundled sample data.
 
-## Deployment (Coolify)
+## Agent API
 
-1. **New Application** in Coolify → **Dockerfile** (build from repo)
-2. Set **Base Directory** if the Dockerfile is not in the repo root
-3. In **Network** settings, set **Port** to `8501`
-4. Build and deploy
+Structured JSON endpoint for agent consumption:
 
-The app listens on port 8501. Coolify will proxy traffic to it.
+```bash
+# GET with sample data
+curl "http://localhost:8000/forecast?sample=true&horizon=90"
 
-Optional: Set up GitHub Actions for CI/CD—build the image, push to GHCR, then trigger Coolify’s deployment webhook.
+# POST with CSV upload
+curl -X POST -F "orders=@data/sample_orders.csv" -F "config=@data/sample_config.json" http://localhost:8000/forecast
+```
+
+Response shape: `skus`, `alerts`, `last_updated`, `data_quality`.
+
+```bash
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+## Source adapters
+
+The ETL supports pluggable sources via `SourceAdapter`:
+
+- `CsvSourceAdapter` — CSV files (default)
+- `ShopifySourceAdapter` — stub for Shopify API integration
+
+See `src/cpg_forecast/sources/`.
+
+## Deployment (Docker Compose + Coolify)
+
+```bash
+docker compose up --build
+```
+
+- **Streamlit**: http://localhost:8501
+- **API**: http://localhost:8000 (health: `/health`)
+
+**Coolify:** New Application → Docker Compose → point to repo. Assign domains or ports: Streamlit (8501), API (8000).
+
 
 ## License
 

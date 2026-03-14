@@ -6,10 +6,10 @@ This document outlines how the minimal demand forecasting demo could extend into
 
 The demo implements:
 
-- **ETL**: CSV → clean → aggregate → time series per SKU
+- **ETL**: CSV → clean → aggregate → time series per SKU (with `SourceAdapter` for extensibility)
 - **Forecast**: Holt-Winters (or moving average fallback) → 90-day demand
 - **Inventory**: Reorder point, safety stock, MOQ-aware recommendations
-- **Output**: HTML report + JSON
+- **Output**: HTML report + JSON + **Agent API** (`GET/POST /forecast` returns structured state)
 
 ## Data integration extensions
 

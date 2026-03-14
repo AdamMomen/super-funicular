@@ -87,7 +87,7 @@ if run:
 
         with st.spinner("Running ETL, forecasting, and computing recommendations..."):
             try:
-                etl_result = run_etl(orders_file, config_path=config_path, freq=freq)
+                etl_result = run_etl(orders_path=orders_file, config_path=config_path, freq=freq)
                 forecasts = forecast_all_skus(etl_result.aggregated, horizon_days=horizon_days)
                 recommendations = compute_recommendations(forecasts, config_path=config_path)
             except Exception as e:

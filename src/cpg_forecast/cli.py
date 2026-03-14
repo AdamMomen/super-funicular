@@ -71,7 +71,7 @@ def main() -> None:
         sys.exit(1)
 
     logger.info("Running ETL on %s", args.input)
-    etl_result = run_etl(args.input, config_path=args.config, freq=args.freq)
+    etl_result = run_etl(orders_path=args.input, config_path=args.config, freq=args.freq)
     logger.info("Aggregated %d rows into %d SKUs", etl_result.raw_row_count, len(etl_result.skus))
 
     logger.info("Forecasting %d-day horizon", args.horizon)
