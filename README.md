@@ -141,6 +141,17 @@ streamlit run app.py
 
 Open http://localhost:8501. Upload a CSV (and optional config JSON), or use the bundled sample data.
 
+### Chat tab (agent)
+
+The **Chat** tab provides an AI agent that can run forecasts, show inventory summaries, and display charts via natural language. It uses Cloudflare Workers AI with function-calling tools.
+
+**Environment variables** (required for Chat):
+
+- `CLOUDFLARE_ACCOUNT_ID` — Your Cloudflare account ID (Workers AI page in dashboard)
+- `CLOUDFLARE_API_TOKEN` — API token with Workers AI Read + Edit permissions
+
+Without these, the Chat tab shows a message to configure credentials. The Forecast tab works without them.
+
 ## Agent API
 
 Structured JSON endpoint for agent consumption:
