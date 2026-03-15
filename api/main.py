@@ -203,6 +203,7 @@ async def post_forecast(
         state = _build_agent_state(recommendations, etl_result)
         fig = plot_all_skus(forecasts, etl_result.aggregated)
         chart_json = json.loads(fig.to_json())
+        charts_by_sku = plot_charts_by_sku(forecasts, etl_result.aggregated)
         table_data = [
             {
                 "sku": r.sku,
@@ -218,6 +219,7 @@ async def post_forecast(
         ]
         result = state.model_dump()
         result["chart_json"] = chart_json
+        result["charts_by_sku"] = charts_by_sku
         result["table_data"] = table_data
         result["raw_row_count"] = etl_result.raw_row_count
         result["skus_count"] = len(etl_result.skus)

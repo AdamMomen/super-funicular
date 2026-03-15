@@ -39,7 +39,11 @@ const emptyOrder = (): OrderRow => ({
   channel: "",
 });
 
-export function ForecastTab() {
+interface ForecastTabProps {
+  inputMode?: "orders" | "edi";
+}
+
+export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [algorithm, setAlgorithm] = useState<
     "holt_winters" | "simple_mean" | "naive" | "rolling_ma" | "exp_smoothing"
@@ -55,6 +59,7 @@ export function ForecastTab() {
   const [recommendations, setRecommendations] = useState<RecommendationRow[]>([]);
   const [rawRowCount, setRawRowCount] = useState<number | null>(null);
   const [skusCount, setSkusCount] = useState<number | null>(null);
+  const [ediText, setEdiText] = useState("");
 
   useEffect(() => {
     fetch("/api/forecast/sample-orders")
@@ -78,49 +83,84 @@ export function ForecastTab() {
     setOrders((prev) => (prev.length <= 1 ? prev : prev.filter((_, j) => j !== i)));
 
   const runForecast = async () => {
-    const valid = orders.filter((o) => o.sku.trim() && o.quantity > 0);
-    if (valid.length === 0) {
-      setError("Add at least one order with SKU and quantity");
-      return;
-    }
     setError(null);
     setAlgorithmUsed(null);
     setFallback(false);
     setLoading(true);
+
     try {
-      const res = await fetch("/api/forecast/json", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orders: valid.map((o) => ({
-            order_date: o.order_date,
-            sku: o.sku.trim(),
-            quantity: Number(o.quantity),
-            channel: o.channel || undefined,
-          })),
-          algorithm: algorithm || "holt_winters",
-          ...(algorithm === "rolling_ma" && { rolling_window: rollingWindow }),
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error((err as { detail?: string }).detail || "Request failed");
+      if (inputMode === "edi") {
+        const trimmed = ediText.trim();
+        if (!trimmed) {
+          setError("Paste EDI 850 content to run forecast");
+          setLoading(false);
+          return;
+        }
+        const blob = new Blob([trimmed], { type: "text/plain" });
+        const formData = new FormData();
+        formData.append("orders", blob, "orders.edi");
+        formData.append("horizon", "90");
+        formData.append("freq", "D");
+
+        const res = await fetch("/api/forecast", { method: "POST", body: formData });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error((err as { detail?: string }).detail || "Request failed");
+        }
+        const data = (await res.json()) as {
+          charts_by_sku?: Record<string, object>;
+          chart_json?: object;
+          table_data?: RecommendationRow[];
+          raw_row_count?: number;
+          skus_count?: number;
+        };
+        setChartsBySku(data.charts_by_sku ?? (data.chart_json ? { "All SKUs": data.chart_json } : {}));
+        setRecommendations(data.table_data ?? []);
+        setRawRowCount(data.raw_row_count ?? null);
+        setSkusCount(data.skus_count ?? null);
+        setAlgorithmUsed(null);
+        setFallback(false);
+      } else {
+        const valid = orders.filter((o) => o.sku.trim() && o.quantity > 0);
+        if (valid.length === 0) {
+          setError("Add at least one order with SKU and quantity");
+          setLoading(false);
+          return;
+        }
+        const res = await fetch("/api/forecast/json", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orders: valid.map((o) => ({
+              order_date: o.order_date,
+              sku: o.sku.trim(),
+              quantity: Number(o.quantity),
+              channel: o.channel || undefined,
+            })),
+            algorithm: algorithm || "holt_winters",
+            ...(algorithm === "rolling_ma" && { rolling_window: rollingWindow }),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error((err as { detail?: string }).detail || "Request failed");
+        }
+        const data = (await res.json()) as {
+          charts_by_sku?: Record<string, object>;
+          table_data?: RecommendationRow[];
+          raw_row_count?: number;
+          skus_count?: number;
+          algorithm_used?: string;
+          model_used?: string;
+          fallback?: boolean;
+        };
+        setChartsBySku(data.charts_by_sku ?? {});
+        setRecommendations(data.table_data ?? []);
+        setRawRowCount(data.raw_row_count ?? null);
+        setSkusCount(data.skus_count ?? null);
+        setAlgorithmUsed(data.model_used ?? data.algorithm_used ?? null);
+        setFallback(data.fallback ?? false);
       }
-      const data = (await res.json()) as {
-        charts_by_sku?: Record<string, object>;
-        table_data?: RecommendationRow[];
-        raw_row_count?: number;
-        skus_count?: number;
-        algorithm_used?: string;
-        model_used?: string;
-        fallback?: boolean;
-      };
-      setChartsBySku(data.charts_by_sku ?? {});
-      setRecommendations(data.table_data ?? []);
-      setRawRowCount(data.raw_row_count ?? null);
-      setSkusCount(data.skus_count ?? null);
-      setAlgorithmUsed(data.model_used ?? data.algorithm_used ?? null);
-      setFallback(data.fallback ?? false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -172,20 +212,48 @@ export function ForecastTab() {
         Forecast demand and get reorder recommendations from your historical order data. Enter orders below, run the forecast, and view the chart and recommendations.
       </p>
 
-      {/* Input: Orders table */}
+      {/* Input: Orders table or EDI textarea */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <h3 className="text-sm font-medium">Orders</h3>
+          <h3 className="text-sm font-medium">{inputMode === "edi" ? "EDI 850" : "Orders"}</h3>
           <span
             className="text-muted-foreground cursor-help"
-            title="Your historical order data. Each row is one order: date, product SKU, quantity sold, and sales channel (e.g. DTC, Amazon). Load sample data or enter your own. Hover over column headers for field descriptions."
+            title={
+              inputMode === "edi"
+                ? "Paste raw X12 850 Purchase Order content. The parser extracts BEG, PO1, and REF*VP segments."
+                : "Your historical order data. Each row is one order: date, product SKU, quantity sold, and sales channel (e.g. DTC, Amazon). Load sample data or enter your own. Hover over column headers for field descriptions."
+            }
           >
             <HelpCircle className="h-3.5 w-3.5" />
           </span>
         </div>
         <p className="text-[12px] text-muted-foreground mb-2">
-          Add order dates, SKUs, quantities, and channels. Load sample data to try it, or enter your own.
+          {inputMode === "edi"
+            ? "Paste X12 850 Purchase Order content below. Run the forecast to extract order lines and generate demand predictions."
+            : "Add order dates, SKUs, quantities, and channels. Load sample data to try it, or enter your own."}
         </p>
+
+        {inputMode === "edi" ? (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <textarea
+              id="edi-textarea"
+              value={ediText}
+              onChange={(e) => setEdiText(e.target.value)}
+              placeholder="Paste X12 850 Purchase Order content here..."
+              className="w-full min-h-[200px] p-4 text-[13px] font-mono bg-background text-foreground placeholder:text-muted-foreground resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset"
+              spellCheck={false}
+            />
+            <div className="flex items-center justify-end px-4 py-2 border-t border-border">
+              <Button
+                onClick={runForecast}
+                disabled={loading}
+                title="Run ETL to parse EDI, aggregate orders, then forecast demand per SKU."
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Forecast"}
+              </Button>
+            </div>
+          </div>
+        ) : (
         <div className="rounded-lg border border-border overflow-x-auto">
         <Table>
           <TableHeader>
@@ -284,42 +352,46 @@ export function ForecastTab() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={algorithm}
-              onChange={(e) =>
-                setAlgorithm(
-                  e.target.value as
-                    | "holt_winters"
-                    | "simple_mean"
-                    | "naive"
-                    | "rolling_ma"
-                    | "exp_smoothing"
-                )
-              }
-              className="h-9 rounded-md border border-border bg-background px-3 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              title="Holt-Winters: trend + seasonality (curved). Simple mean, Naive, Rolling MA: constant forecast (flat line). Exp smoothing: smoothed level."
-            >
-              <option value="holt_winters">Holt-Winters</option>
-              <option value="simple_mean">Simple mean</option>
-              <option value="naive">Naive</option>
-              <option value="rolling_ma">Rolling MA</option>
-              <option value="exp_smoothing">Exponential smoothing</option>
-            </select>
-            {algorithm === "rolling_ma" && (
-              <div className="flex items-center gap-1">
-                <label htmlFor="rolling-window" className="text-[12px] text-muted-foreground">
-                  Window:
-                </label>
-                <input
-                  id="rolling-window"
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={rollingWindow}
-                  onChange={(e) => setRollingWindow(Math.max(1, parseInt(e.target.value, 10) || 14))}
-                  className="h-9 w-16 rounded-md border border-border bg-background px-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
+            {inputMode === "orders" && (
+              <>
+                <select
+                  value={algorithm}
+                  onChange={(e) =>
+                    setAlgorithm(
+                      e.target.value as
+                        | "holt_winters"
+                        | "simple_mean"
+                        | "naive"
+                        | "rolling_ma"
+                        | "exp_smoothing"
+                    )
+                  }
+                  className="h-9 rounded-md border border-border bg-background px-3 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  title="Holt-Winters: trend + seasonality (curved). Simple mean, Naive, Rolling MA: constant forecast (flat line). Exp smoothing: smoothed level."
+                >
+                  <option value="holt_winters">Holt-Winters</option>
+                  <option value="simple_mean">Simple mean</option>
+                  <option value="naive">Naive</option>
+                  <option value="rolling_ma">Rolling MA</option>
+                  <option value="exp_smoothing">Exponential smoothing</option>
+                </select>
+                {algorithm === "rolling_ma" && (
+                  <div className="flex items-center gap-1">
+                    <label htmlFor="rolling-window" className="text-[12px] text-muted-foreground">
+                      Window:
+                    </label>
+                    <input
+                      id="rolling-window"
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={rollingWindow}
+                      onChange={(e) => setRollingWindow(Math.max(1, parseInt(e.target.value, 10) || 14))}
+                      className="h-9 w-16 rounded-md border border-border bg-background px-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                )}
+              </>
             )}
             <Button
               onClick={runForecast}
@@ -331,6 +403,7 @@ export function ForecastTab() {
           </div>
         </div>
         </div>
+        )}
       </div>
 
       {error && <p className="text-[13px] text-destructive">{error}</p>}
@@ -413,8 +486,8 @@ export function ForecastTab() {
                     <TableRow>
                       <TableHead title="Product identifier (stock keeping unit).">SKU</TableHead>
                       <TableHead title="Order now (urgent), Low stock (monitor), or OK (no action).">Status</TableHead>
-                      <TableHead title="Predicted units needed over the next 90 days.">90-Day Forecast</TableHead>
                       <TableHead title="Units currently in stock.">Current Inv</TableHead>
+                      <TableHead title="Predicted units needed over the next 90 days.">90-Day Forecast</TableHead>
                       <TableHead title="How many units to order when restocking.">Reorder Qty</TableHead>
                       <TableHead title="Estimated days until stock runs out at current demand rate.">Days to Stockout</TableHead>
                     </TableRow>
@@ -435,8 +508,8 @@ export function ForecastTab() {
                       >
                         <TableCell className="font-medium py-3">{row.sku}</TableCell>
                         <TableCell className="py-3">{recBadge(row.recommendation)}</TableCell>
-                        <TableCell className="py-3 tabular-nums">{formatNum(row.forecast_90d)}</TableCell>
                         <TableCell className="py-3 tabular-nums">{formatNum(row.current_inv)}</TableCell>
+                        <TableCell className="py-3 tabular-nums">{formatNum(row.forecast_90d)}</TableCell>
                         <TableCell className="py-3 tabular-nums">{formatNum(row.reorder_qty)}</TableCell>
                         <TableCell className="py-3 tabular-nums text-muted-foreground">
                           {row.days_to_stockout != null ? formatNum(row.days_to_stockout) : "—"}
