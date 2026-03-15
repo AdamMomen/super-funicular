@@ -28,9 +28,10 @@ export function Layout() {
               type="button"
               onClick={startTutorial}
               className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              title={inputMode === "edi" ? "Start the EDI 850 tour" : "Start the CSV data tour"}
             >
               <BookOpen className="h-4 w-4" />
-              Take a tour
+              {inputMode === "edi" ? "Take EDI tour" : "Take CSV tour"}
             </button>
           </div>
           <div className="mt-4">
