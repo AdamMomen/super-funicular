@@ -1,6 +1,7 @@
 # Output
 output/
 *.html
+!frontend/index.html
 *.png
 !docs/*.png
 
