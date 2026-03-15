@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
+import base64
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -76,6 +77,28 @@ def plot_forecast(
     return fig
 
 
+def _fig_to_json_safe(fig: go.Figure) -> dict:
+    """Convert figure to JSON-serializable dict with plain arrays (no bdata)."""
+    d = fig.to_dict()
+    # Recursively convert numpy arrays and bdata dicts to plain lists
+    def _convert(obj):
+        if isinstance(obj, dict):
+            if "bdata" in obj and "dtype" in obj:
+                buf = base64.b64decode(obj["bdata"])
+                arr = np.frombuffer(buf, dtype=obj.get("dtype", "float64"))
+                if "shape" in obj:
+                    arr = arr.reshape(obj["shape"])
+                return arr.tolist()
+            return {k: _convert(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_convert(x) for x in obj]
+        if hasattr(obj, "tolist"):
+            return obj.tolist()
+        return obj
+
+    return _convert(d)
+
+
 def plot_charts_by_sku(
     forecasts: dict[str, ForecastResult],
     aggregated: dict[str, pd.Series],
@@ -86,7 +109,7 @@ def plot_charts_by_sku(
         forecast = forecasts[sku]
         history = aggregated.get(sku, forecast.history)
         fig = plot_forecast(history, forecast, sku)
-        result[sku] = json.loads(fig.to_json())
+        result[sku] = _fig_to_json_safe(fig)
     return result
 
 

@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ForecastChart } from "@/components/ForecastChart";
-import { HelpCircle, Loader2, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, HelpCircle, Loader2, Plus, Trash2 } from "lucide-react";
 
 interface OrderRow {
   order_date: string;
@@ -50,6 +50,8 @@ export function ForecastTab() {
   const [loadingSample, setLoadingSample] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartsBySku, setChartsBySku] = useState<Record<string, object>>({});
+  const [algorithmUsed, setAlgorithmUsed] = useState<string | null>(null);
+  const [fallback, setFallback] = useState(false);
   const [recommendations, setRecommendations] = useState<RecommendationRow[]>([]);
   const [rawRowCount, setRawRowCount] = useState<number | null>(null);
   const [skusCount, setSkusCount] = useState<number | null>(null);
@@ -82,6 +84,8 @@ export function ForecastTab() {
       return;
     }
     setError(null);
+    setAlgorithmUsed(null);
+    setFallback(false);
     setLoading(true);
     try {
       const res = await fetch("/api/forecast/json", {
@@ -94,8 +98,8 @@ export function ForecastTab() {
             quantity: Number(o.quantity),
             channel: o.channel || undefined,
           })),
-          algorithm,
-          rolling_window: algorithm === "rolling_ma" ? rollingWindow : undefined,
+          algorithm: algorithm || "holt_winters",
+          ...(algorithm === "rolling_ma" && { rolling_window: rollingWindow }),
         }),
       });
       if (!res.ok) {
@@ -107,11 +111,16 @@ export function ForecastTab() {
         table_data?: RecommendationRow[];
         raw_row_count?: number;
         skus_count?: number;
+        algorithm_used?: string;
+        model_used?: string;
+        fallback?: boolean;
       };
       setChartsBySku(data.charts_by_sku ?? {});
       setRecommendations(data.table_data ?? []);
       setRawRowCount(data.raw_row_count ?? null);
       setSkusCount(data.skus_count ?? null);
+      setAlgorithmUsed(data.model_used ?? data.algorithm_used ?? null);
+      setFallback(data.fallback ?? false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -137,6 +146,14 @@ export function ForecastTab() {
     if (v === "LOW_STOCK") return <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30">Low stock</Badge>;
     return <Badge variant="secondary">OK</Badge>;
   };
+
+  const urgencyOrder = (a: RecommendationRow, b: RecommendationRow) => {
+    const order = { ORDER_NOW: 0, LOW_STOCK: 1, OK: 2 };
+    return (order[a.recommendation as keyof typeof order] ?? 2) - (order[b.recommendation as keyof typeof order] ?? 2);
+  };
+  const sortedRecommendations = [...recommendations].sort(urgencyOrder);
+  const urgentCount = recommendations.filter((r) => r.recommendation === "ORDER_NOW").length;
+  const lowStockCount = recommendations.filter((r) => r.recommendation === "LOW_STOCK").length;
 
   const visibleOrders = showAllRows ? orders : orders.slice(0, 10);
   const hiddenCount = orders.length - 10;
@@ -280,7 +297,7 @@ export function ForecastTab() {
                 )
               }
               className="h-9 rounded-md border border-border bg-background px-3 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              title="Forecasting algorithm"
+              title="Holt-Winters: trend + seasonality (curved). Simple mean, Naive, Rolling MA: constant forecast (flat line). Exp smoothing: smoothed level."
             >
               <option value="holt_winters">Holt-Winters</option>
               <option value="simple_mean">Simple mean</option>
@@ -329,6 +346,16 @@ export function ForecastTab() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-medium">Forecast chart</h3>
+              {algorithmUsed && (
+                <Badge variant="outline" className="text-[11px] font-normal">
+                  {algorithmUsed.replace(/_/g, " ")}
+                </Badge>
+              )}
+              {fallback && (
+                <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                  (Holt-Winters needs 30+ days; fell back)
+                </span>
+              )}
               <span
                 className="text-muted-foreground cursor-help"
                 title="Shows historical demand (past orders) and 90-day forecast per SKU. Use this to visualize trends and projected demand over time."
@@ -352,51 +379,83 @@ export function ForecastTab() {
             </Tabs>
           </div>
           {recommendations.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-sm font-medium">Reorder recommendations</h3>
-                <span
-                  className="text-muted-foreground cursor-help"
-                  title="Per-SKU recommendations based on forecast, reorder point, and current inventory. Order = order now (urgent). Low = monitor stock. OK = no action needed. Hover over column headers for field descriptions."
-                >
-                  <HelpCircle className="h-3.5 w-3.5" />
-                </span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium">Reorder recommendations</h3>
+                  <span
+                    className="text-muted-foreground cursor-help"
+                    title="Per-SKU recommendations based on forecast, reorder point, and current inventory. Order now = urgent. Low stock = monitor. OK = no action needed."
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                {(urgentCount > 0 || lowStockCount > 0) && (
+                  <div className="flex items-center gap-3 text-[12px]">
+                    {urgentCount > 0 && (
+                      <span className="flex items-center gap-1 text-destructive font-medium">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        {urgentCount} {urgentCount === 1 ? "SKU" : "SKUs"} need{urgentCount === 1 ? "s" : ""} immediate reorder
+                      </span>
+                    )}
+                    {lowStockCount > 0 && (
+                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        {lowStockCount} {lowStockCount === 1 ? "SKU" : "SKUs"} low stock
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="rounded-lg border border-border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead title="Product identifier (stock keeping unit).">SKU</TableHead>
-                    <TableHead title="Predicted units needed over the next 90 days.">90-Day Forecast</TableHead>
-                    <TableHead title="How many units to order when restocking.">Reorder Qty</TableHead>
-                    <TableHead title="Order now (urgent), Low stock (monitor), or OK (no action).">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recommendations.map((row, i) => (
-                    <TableRow
-                      key={row.sku}
-                      className={i % 2 === 1 ? "bg-muted/20" : ""}
-                    >
-                      <TableCell className="font-medium py-3">{row.sku}</TableCell>
-                      <TableCell className="py-3 tabular-nums">{formatNum(row.forecast_90d)}</TableCell>
-                      <TableCell className="py-3 tabular-nums">{formatNum(row.reorder_qty)}</TableCell>
-                      <TableCell className="py-3">{recBadge(row.recommendation)}</TableCell>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead title="Product identifier (stock keeping unit).">SKU</TableHead>
+                      <TableHead title="Order now (urgent), Low stock (monitor), or OK (no action).">Status</TableHead>
+                      <TableHead title="Predicted units needed over the next 90 days.">90-Day Forecast</TableHead>
+                      <TableHead title="Units currently in stock.">Current Inv</TableHead>
+                      <TableHead title="How many units to order when restocking.">Reorder Qty</TableHead>
+                      <TableHead title="Estimated days until stock runs out at current demand rate.">Days to Stockout</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="px-4 py-2 border-t border-border text-[12px] text-muted-foreground flex justify-between">
-                <span>{rawRowCount ?? 0} rows · {skusCount ?? 0} SKUs</span>
-                <button
-                  type="button"
-                  onClick={downloadJson}
-                  className="hover:text-foreground"
-                  title="Download the full recommendations table as a JSON file. Includes forecast, reorder quantities, and status for each SKU."
-                >
-                  Download JSON
-                </button>
-              </div>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedRecommendations.map((row, i) => (
+                      <TableRow
+                        key={row.sku}
+                        className={
+                          row.recommendation === "ORDER_NOW"
+                            ? "bg-destructive/5"
+                            : row.recommendation === "LOW_STOCK"
+                              ? "bg-amber-500/5"
+                              : i % 2 === 1
+                                ? "bg-muted/20"
+                                : ""
+                        }
+                      >
+                        <TableCell className="font-medium py-3">{row.sku}</TableCell>
+                        <TableCell className="py-3">{recBadge(row.recommendation)}</TableCell>
+                        <TableCell className="py-3 tabular-nums">{formatNum(row.forecast_90d)}</TableCell>
+                        <TableCell className="py-3 tabular-nums">{formatNum(row.current_inv)}</TableCell>
+                        <TableCell className="py-3 tabular-nums">{formatNum(row.reorder_qty)}</TableCell>
+                        <TableCell className="py-3 tabular-nums text-muted-foreground">
+                          {row.days_to_stockout != null ? formatNum(row.days_to_stockout) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="px-4 py-2 border-t border-border text-[12px] text-muted-foreground flex justify-between items-center">
+                  <span>{rawRowCount ?? 0} rows · {skusCount ?? 0} SKUs</span>
+                  <button
+                    type="button"
+                    onClick={downloadJson}
+                    className="hover:text-foreground transition-colors"
+                    title="Download the full recommendations table as a JSON file."
+                  >
+                    Download JSON
+                  </button>
+                </div>
               </div>
             </div>
           )}

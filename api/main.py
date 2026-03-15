@@ -21,6 +21,7 @@ from api.schemas import AgentState, ChatRequest, DataQuality, ForecastJsonReques
 from cpg_forecast.agent import AgentContext, run_agent_turn, run_agent_turn_stream
 from cpg_forecast.etl import run_etl
 from cpg_forecast.forecast import forecast_all_skus
+from cpg_forecast.sources.edi_source import EdiSourceAdapter
 from cpg_forecast.inventory import compute_recommendations
 from cpg_forecast.llm import is_configured
 from cpg_forecast.viz import plot_all_skus, plot_charts_by_sku
@@ -152,6 +153,14 @@ def get_forecast_sample(
     return result
 
 
+def _is_edi_file(filename: str) -> bool:
+    """Check if filename indicates an EDI file."""
+    if not filename:
+        return False
+    lower = filename.lower()
+    return lower.endswith(".edi") or lower.endswith(".x12") or lower.endswith(".850")
+
+
 @api.post("/forecast")
 async def post_forecast(
     orders: UploadFile = File(...),
@@ -159,15 +168,22 @@ async def post_forecast(
     horizon: int = Form(90),
     freq: str = Form("D"),
 ):
-    """Run forecast with uploaded CSV. Returns agent state JSON."""
-    if not orders.filename or not orders.filename.endswith(".csv"):
+    """Run forecast with uploaded CSV or EDI 850. Returns agent state JSON."""
+    if not orders.filename:
         return JSONResponse(
             status_code=400,
-            content={"detail": "Orders file must be a CSV"},
+            content={"detail": "Orders file is required"},
+        )
+    is_edi = _is_edi_file(orders.filename)
+    if not is_edi and not orders.filename.lower().endswith(".csv"):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Orders file must be CSV (.csv) or EDI 850 (.edi, .x12)"},
         )
 
     try:
-        with tempfile.NamedTemporaryFile(mode="wb", suffix=".csv", delete=False) as f:
+        suffix = ".edi" if is_edi else ".csv"
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=suffix, delete=False) as f:
             f.write(await orders.read())
             orders_path = Path(f.name)
 
@@ -177,7 +193,11 @@ async def post_forecast(
                 f.write(await config.read())
                 config_path = Path(f.name)
 
-        etl_result = run_etl(orders_path=orders_path, config_path=config_path, freq=freq)
+        if is_edi:
+            source = EdiSourceAdapter(orders_path)
+            etl_result = run_etl(source=source, config_path=config_path, freq=freq)
+        else:
+            etl_result = run_etl(orders_path=orders_path, config_path=config_path, freq=freq)
         forecasts = forecast_all_skus(etl_result.aggregated, horizon_days=horizon)
         recommendations = compute_recommendations(forecasts, config_path=config_path)
         state = _build_agent_state(recommendations, etl_result)
@@ -249,6 +269,10 @@ async def post_forecast_json(req: ForecastJsonRequest):
         result["table_data"] = table_data
         result["raw_row_count"] = etl_result.raw_row_count
         result["skus_count"] = len(etl_result.skus)
+        result["algorithm_used"] = req.algorithm
+        model_used = next((r.model_used for r in forecasts.values()), req.algorithm)
+        result["model_used"] = model_used
+        result["fallback"] = model_used != req.algorithm  # True when HW fell back to simple mean
         return result
     except ValueError as e:
         return JSONResponse(status_code=400, content={"detail": str(e)})

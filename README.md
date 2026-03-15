@@ -164,8 +164,9 @@ Structured JSON endpoint for agent consumption:
 # GET with sample data
 curl "http://localhost:8000/api/forecast?sample=true&horizon=90"
 
-# POST with CSV upload
+# POST with CSV or EDI 850 upload
 curl -X POST -F "orders=@data/sample_orders.csv" -F "config=@data/sample_config.json" http://localhost:8000/api/forecast
+# Or with EDI 850: -F "orders=@data/sample_850.edi"
 ```
 
 Response shape: `skus`, `alerts`, `last_updated`, `data_quality`.
@@ -179,9 +180,10 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 The ETL supports pluggable sources via `SourceAdapter`:
 
 - `CsvSourceAdapter` — CSV files (default)
+- `EdiSourceAdapter` — X12 850 Purchase Order files (.edi, .x12)
 - `ShopifySourceAdapter` — stub for Shopify API integration
 
-See `src/cpg_forecast/sources/`.
+See `src/cpg_forecast/sources/` and [docs/EDI_INTEGRATION.md](docs/EDI_INTEGRATION.md) for EDI 850 details.
 
 ## Development (Docker with hot reload)
 
@@ -196,14 +198,16 @@ Source code is mounted as volumes; edits to `frontend/`, `api/`, or `src/` trigg
 
 ## Deployment (Docker Compose + Coolify)
 
+**Stack:** Vite + React (frontend) + FastAPI (backend) — not Next.js. Single container serves both.
+
 ```bash
 docker compose up --build
 ```
 
-- **App (React + API)**: http://localhost:8000 — serves frontend and API at `/api/*`
-- Health: `GET /api/health`
+- **App**: http://localhost:8000 — React SPA at `/`, API at `/api/*`
+- **Health**: `GET /api/health`
 
-**Coolify:** New Application → Docker Compose → point to repo. Assign domain or port 8000.
+**Coolify:** New Application → Docker Compose → point to repo. One service, one port (8000). Assign domain or expose port.
 
 
 ## License

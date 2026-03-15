@@ -18,7 +18,7 @@ The demo implements:
 | Source            | Integration approach                    | Data extracted                    |
 | ----------------- | --------------------------------------- | -------------------------------- |
 | **Shopify API**   | OAuth + REST/GraphQL                    | Orders, inventory, products      |
-| **EDI (X12 850)** | File drop or SFTP + parser              | POs, ASNs, invoices              |
+| **EDI (X12 850)** | File drop or SFTP + parser              | POs, ASNs, invoices — see [EDI Integration](EDI_INTEGRATION.md) |
 | **Email**         | IMAP + LLM extraction or templates     | Supplier confirmations, lead times|
 | **Airtable**      | REST API                                | Inventory snapshots, SKU metadata|
 | **QuickBooks/Xero** | OAuth + API                           | Invoices, payments               |

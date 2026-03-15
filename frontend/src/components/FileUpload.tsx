@@ -31,11 +31,17 @@ export function FileUpload({
   const configRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const isAccepted = (name: string) => {
+    const ext = name.toLowerCase().slice(name.lastIndexOf("."));
+    const allowed = accept?.split(",").map((a) => a.trim().toLowerCase()) ?? [".csv"];
+    return allowed.some((a) => ext === a || name.toLowerCase().endsWith(a));
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files?.[0];
-    if (f && (accept === ".csv" ? f.name.endsWith(".csv") : true)) {
+    if (f && (accept ? isAccepted(f.name) : true)) {
       onFileSelect(f);
     }
   };

@@ -88,7 +88,8 @@ export function ChatTab() {
             <FileUpload
               onFileSelect={handleOrdersFile}
               onConfigSelect={handleConfigFile}
-              label="Upload orders CSV for chat context"
+              accept=".csv,.edi,.x12"
+              label="Upload orders CSV or EDI 850 for chat context"
             />
           </div>
         )}
