@@ -237,6 +237,7 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
           <div className="rounded-lg border border-border overflow-hidden">
             <textarea
               id="edi-textarea"
+              data-tour="edi-textarea"
               value={ediText}
               onChange={(e) => setEdiText(e.target.value)}
               placeholder="Paste X12 850 Purchase Order content here..."
@@ -245,6 +246,7 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
             />
             <div className="flex items-center justify-end px-4 py-2 border-t border-border">
               <Button
+                data-tour="forecast-btn"
                 onClick={runForecast}
                 disabled={loading}
                 title="Run ETL to parse EDI, aggregate orders, then forecast demand per SKU."
@@ -254,7 +256,7 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
             </div>
           </div>
         ) : (
-        <div className="rounded-lg border border-border overflow-x-auto">
+        <div data-tour="orders-table" className="rounded-lg border border-border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -394,6 +396,7 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
               </>
             )}
             <Button
+              data-tour="forecast-btn"
               onClick={runForecast}
               disabled={loading}
               title="Run ETL to clean and aggregate your orders, then forecast demand per SKU. Outputs a chart (historical + 90-day forecast) and a reorder recommendations table."
@@ -408,15 +411,16 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
 
       {error && <p className="text-[13px] text-destructive">{error}</p>}
 
-      {loading && (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      )}
+      <div data-tour="forecast-results" className="space-y-6">
+        {loading && (
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="h-8 w-8 animate-spin" />
+          </div>
+        )}
 
-      {!loading && Object.keys(chartsBySku).length > 0 && (
-        <>
-          <div>
+        {!loading && Object.keys(chartsBySku).length > 0 && (
+          <>
+            <div data-tour="forecast-chart">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-medium">Forecast chart</h3>
               {algorithmUsed && (
@@ -450,9 +454,9 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
                 </TabsContent>
               ))}
             </Tabs>
-          </div>
+            </div>
           {recommendations.length > 0 && (
-            <div className="space-y-3">
+            <div data-tour="recommendations-table" className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-medium">Reorder recommendations</h3>
@@ -533,7 +537,8 @@ export function ForecastTab({ inputMode = "orders" }: ForecastTabProps) {
             </div>
           )}
         </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

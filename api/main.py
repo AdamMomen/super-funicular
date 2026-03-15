@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import pandas as pd
@@ -108,6 +108,15 @@ def get_sample_orders():
             "channel": str(r.get("channel", "")) if pd.notna(r.get("channel")) else "",
         })
     return {"orders": rows}
+
+
+@api.get("/forecast/sample-edi")
+def get_sample_edi():
+    """Return sample EDI 850 content as plain text for copy/paste."""
+    path = Path("data/sample_850.edi")
+    if not path.exists():
+        return JSONResponse(status_code=404, content={"detail": "Sample EDI not found"})
+    return Response(content=path.read_text(), media_type="text/plain")
 
 
 @api.get("/forecast")

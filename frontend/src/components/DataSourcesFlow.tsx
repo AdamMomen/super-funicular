@@ -19,6 +19,7 @@ export function DataSourcesFlow({ selectedSource = "csv", onSourceChange }: Data
       <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
+          data-tour="csv-badge"
           onClick={() => onSourceChange?.("csv")}
           className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors ${
             csvSelected
@@ -32,6 +33,7 @@ export function DataSourcesFlow({ selectedSource = "csv", onSourceChange }: Data
         </button>
         <button
           type="button"
+          data-tour="edi-badge"
           onClick={() => onSourceChange?.("edi")}
           className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors ${
             ediSelected
