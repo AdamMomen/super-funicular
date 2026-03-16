@@ -2,9 +2,9 @@
 
 Order history → 90-day demand forecast and reorder recommendations. CSV or EDI 850 input. No spreadsheets.
 
-![Demo](docs/demo.png)
+**[Live demo](https://cpg.coolify.momen.earth)** · **[Watch walkthrough](https://www.loom.com/share/722ec4d68e65410384b5d1acef7de75e)** — CSV and EDI flows, guided tour, forecast chart, and recommendations.
 
-**[Watch walkthrough](https://www.loom.com/share/722ec4d68e65410384b5d1acef7de75e)** — CSV and EDI flows, guided tour, forecast chart, and recommendations.
+![Demo](docs/demo.png)
 
 ## Features
 
